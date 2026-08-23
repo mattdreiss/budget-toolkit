@@ -1,0 +1,131 @@
+#budget-toolkit-panel {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  width: 340px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  color: #0f172a;
+  z-index: 2147483647;
+}
+
+#budget-toolkit-panel.budget-toolkit-collapsed .budget-toolkit-body {
+  display: none;
+}
+
+.budget-toolkit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  font-weight: 600;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.budget-toolkit-toggle {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.budget-toolkit-body {
+  padding: 12px;
+}
+
+.budget-toolkit-body section {
+  margin-bottom: 16px;
+}
+
+.budget-toolkit-body section:last-child {
+  margin-bottom: 0;
+}
+
+.budget-toolkit-body h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.budget-toolkit-graph-caption {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.budget-toolkit-total-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.budget-toolkit-total-name {
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+.budget-toolkit-total-amounts {
+  flex: 1;
+  color: #475569;
+  font-size: 12px;
+}
+
+.budget-toolkit-total-row button {
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.budget-toolkit-checklist {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin: 8px 0;
+}
+
+.budget-toolkit-checklist label {
+  display: block;
+  padding: 2px 0;
+}
+
+.budget-toolkit-checklist-item {
+  padding-left: 16px !important;
+  font-size: 12px;
+  color: #475569;
+}
+
+.budget-toolkit-total-form input[type="text"] {
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.budget-toolkit-total-form button {
+  margin-right: 8px;
+  cursor: pointer;
+}
+
+.budget-toolkit-add-total {
+  width: 100%;
+  padding: 8px;
+  cursor: pointer;
+  border: 1px dashed #94a3b8;
+  border-radius: 4px;
+  background: none;
+  color: #334155;
+}
