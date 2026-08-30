@@ -64,13 +64,18 @@ EveryDollar re-mints every group/item/allocation ID each month (`urn:everydollar
 
 EveryDollar is a React SPA (confirmed via `__reactFiber$...` keys on its DOM nodes) using an internal component library whose elements are tagged `data-eds-component="..."` (e.g. `EDSPageLayout.Main`, `EDSAppLayout`, `EDSSideNavigation`) — useful, relatively stable selectors for anchoring to the page. It does **not** use Shadow DOM (no element on the page has a `shadowRoot`), so nothing blocks our CSS or DOM access.
 
-The relevant mechanic is React's **virtual DOM reconciliation**. React owns the real DOM subtree under any container it renders into, and on each render it diffs against its own virtual tree and mutates the real DOM to match — it has no awareness of nodes a content script inserted by hand. So anything we `prepend` into a React-managed container can be silently removed or reordered on the next render.
+The relevant mechanic is React's **virtual DOM reconciliation**, but the danger is not where you'd expect. React removes DOM nodes only for fibers it is deleting — it does not walk a container discarding children it doesn't recognise — so a node we `prepend` into a React-managed container is invisible to reconciliation and survives ordinary re-renders. What it does *not* survive is React replacing that container element outright, which EveryDollar does intermittently. See `docs/panel-mounting.md`.
 
-### Panel mounting (known-imperfect)
+### Panel mounting
 
-`src/presentation/mountPanel.ts` prepends the panel into `[data-eds-component="EDSPageLayout.Main"]` and uses a `MutationObserver` to re-pin it. That is fighting reconciliation on every render and is inherently racy — commit `4b6d637` notes the panel still gets overwritten. This was deliberately left as-is during the TypeScript port to keep that change reviewable.
+`src/presentation/mountPanel.ts` prepends the panel into `[data-eds-component="EDSPageLayout.Main"]`, and `styles.css` makes it look like one of EveryDollar's own cards. Two rules keep it there, and both matter:
 
-If you fix it: don't reach for Shadow DOM–style encapsulation. Mount **outside** any React-owned subtree entirely (a sibling of React's root, positioned with CSS) so no re-render can touch it.
+- **Never cache the container.** Re-resolve it by selector each time. React intermittently discards the whole `EDSPageLayout.Main` element and mounts a replacement; the panel isn't removed, it's just left in a detached node. An observer bound to that node is dead, which is exactly how the panel used to vanish permanently (commit `4b6d637`).
+- **Observe `<body>`, which React can't replace.** Its root container, `#app-container`, is a child of it. This also covers the column not existing yet at `document_idle`.
+
+Contrary to what this file used to say, React does *not* evict foreign children from a container it renders into — verified against the live app, along with everything else in `docs/panel-mounting.md`. Read that before changing any of this.
+
+No delay or readiness gate is needed, and adding one is a step backwards: a `MutationObserver` callback is delivered after the task that mutated the DOM, React's commit phase is synchronous, and microtasks run before paint — so the callback already means "React finished this commit" and re-placing there can't flicker.
 
 ## Testing
 

@@ -1,13 +1,22 @@
+/*
+ * The panel sits inside EveryDollar's own main column (see mountPanel.ts), so it
+ * is styled to read as one of their cards rather than as an overlay. The values
+ * below were sampled from the live app: cards are white with a 16px radius and
+ * no border or shadow, body text is #1F2426 on a #F5F7F8 page, secondary text is
+ * #495257, and interactive text is #0073B9. The typeface is inherited rather
+ * than declared — inheriting from their column picks up canada-type-gibson and
+ * keeps us correct if they change it.
+ */
 #budget-toolkit-panel {
   width: 100%;
   box-sizing: border-box;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 13px;
-  color: #0f172a;
+  border-radius: 16px;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+  color: #1f2426;
 }
 
 #budget-toolkit-panel * {
@@ -22,15 +31,23 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
+  padding: 16px 24px;
+  font-size: 20px;
   font-weight: 600;
-  border-bottom: 1px solid #e2e8f0;
+  color: #1f2426;
+}
+
+#budget-toolkit-panel:not(.budget-toolkit-collapsed) .budget-toolkit-header {
+  border-bottom: 1px solid #eef1f3;
 }
 
 .budget-toolkit-toggle {
   background: none;
   border: none;
-  font-size: 16px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 18px;
+  color: #0073b9;
   cursor: pointer;
   line-height: 1;
 }
@@ -39,7 +56,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 24px;
-  padding: 16px 20px;
+  padding: 20px 24px 24px;
 }
 
 .budget-toolkit-body section {
@@ -48,11 +65,10 @@
 }
 
 .budget-toolkit-body h3 {
-  margin: 0 0 8px;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #64748b;
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #495257;
 }
 
 .budget-toolkit-graph canvas {
@@ -62,9 +78,9 @@
 }
 
 .budget-toolkit-graph-caption {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #475569;
+  margin-top: 8px;
+  font-size: 14px;
+  color: #495257;
 }
 
 .budget-toolkit-totals-list {
@@ -76,8 +92,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid #f1f5f9;
+  padding: 8px 0;
+  border-bottom: 1px solid #eef1f3;
 }
 
 .budget-toolkit-total-name {
@@ -87,20 +103,26 @@
 
 .budget-toolkit-total-amounts {
   flex: 1;
-  color: #475569;
-  font-size: 12px;
+  color: #495257;
+  font-size: 14px;
 }
 
 .budget-toolkit-total-row button {
-  font-size: 12px;
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0073b9;
   cursor: pointer;
 }
 
 .budget-toolkit-empty {
   margin: 0;
-  padding: 6px 0;
-  color: #64748b;
-  font-size: 12px;
+  padding: 8px 0;
+  color: #495257;
+  font-size: 14px;
 }
 
 /* A total whose selections no longer all resolve; the title attribute says why. */
@@ -111,50 +133,63 @@
 
 .budget-toolkit-form-error {
   margin: 8px 0 0;
-  color: #b91c1c;
-  font-size: 12px;
+  color: #c02b2b;
+  font-size: 14px;
 }
 
 .budget-toolkit-checklist {
   max-height: 200px;
   overflow-y: auto;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  padding: 6px 8px;
+  border: 1px solid #dfe4e7;
+  border-radius: 8px;
+  padding: 8px 10px;
   margin: 8px 0;
 }
 
 .budget-toolkit-checklist label {
   display: block;
-  padding: 2px 0;
+  padding: 3px 0;
+  font-size: 15px;
 }
 
 .budget-toolkit-checklist-item {
   padding-left: 16px !important;
-  font-size: 12px;
-  color: #475569;
+  font-size: 14px;
+  color: #495257;
 }
 
 .budget-toolkit-total-form input[type="text"] {
   width: 100%;
-  padding: 6px 8px;
+  padding: 8px 10px;
   margin-bottom: 8px;
-  border: 1px solid #cbd5e1;
-  border-radius: 4px;
+  font: inherit;
+  font-size: 15px;
+  border: 1px solid #dfe4e7;
+  border-radius: 8px;
   box-sizing: border-box;
 }
 
 .budget-toolkit-total-form button {
   margin-right: 8px;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0073b9;
   cursor: pointer;
 }
 
 .budget-toolkit-add-total {
   width: 100%;
-  padding: 8px;
+  padding: 10px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
-  border: 1px dashed #94a3b8;
-  border-radius: 4px;
+  border: 1px dashed #c3cbcf;
+  border-radius: 8px;
   background: none;
-  color: #334155;
+  color: #0073b9;
 }

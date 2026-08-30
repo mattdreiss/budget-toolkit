@@ -2,8 +2,9 @@ import type { SpendSeries } from "../domain/budget/spendSeries.js";
 
 const HEIGHT = 160;
 const PADDING = 20;
-const AXIS_COLOUR = "#94a3b8";
-const LINE_COLOUR = "#2563eb";
+// Sampled from EveryDollar's own palette so the chart reads as part of the app.
+const AXIS_COLOUR = "#c3cbcf";
+const LINE_COLOUR = "#0073b9";
 
 /** Draws net expense spending per day as a line chart, with a monthly total beneath. */
 export function renderSpendChart(container: HTMLElement, spend: SpendSeries): void {
