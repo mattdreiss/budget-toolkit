@@ -1,5 +1,7 @@
 window.BudgetToolkit = window.BudgetToolkit || {};
 
+window.BudgetToolkit.PAGE_CONTAINER_SELECTOR = '[data-eds-component="EDSPageLayout.Main"]';
+
 window.BudgetToolkit.createPanel = function createPanel() {
   const panel = document.createElement("div");
   panel.id = "budget-toolkit-panel";
@@ -39,7 +41,38 @@ window.BudgetToolkit.createPanel = function createPanel() {
 
   body.append(graphSection, totalsSection);
   panel.append(header, body);
-  document.body.appendChild(panel);
 
   return { panel, graphContainer, totalsContainer };
+};
+
+window.BudgetToolkit.mountPanel = function mountPanel(panel) {
+  const selector = window.BudgetToolkit.PAGE_CONTAINER_SELECTOR;
+
+  function keepPinnedToTop(container) {
+    if (container.firstElementChild !== panel) {
+      container.prepend(panel);
+    }
+  }
+
+  function attach(container) {
+    keepPinnedToTop(container);
+    new MutationObserver(() => keepPinnedToTop(container)).observe(container, {
+      childList: true,
+    });
+  }
+
+  const existing = document.querySelector(selector);
+  if (existing) {
+    attach(existing);
+    return;
+  }
+
+  const findObserver = new MutationObserver(() => {
+    const container = document.querySelector(selector);
+    if (container) {
+      findObserver.disconnect();
+      attach(container);
+    }
+  });
+  findObserver.observe(document.documentElement, { childList: true, subtree: true });
 };

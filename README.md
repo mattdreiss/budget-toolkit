@@ -20,7 +20,7 @@ This isn't published to the Chrome Web Store. To use it:
 1. Clone this repo.
 2. Go to `chrome://extensions`, enable **Developer mode**.
 3. Click **Load unpacked** and select the repo folder.
-4. Visit https://www.everydollar.com/app/budget — the panel appears in the bottom-right corner.
+4. Visit https://www.everydollar.com/app/budget — the panel appears full-width at the top of the budget page.
 
 ## Project structure
 

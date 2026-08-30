@@ -7,8 +7,8 @@ window.BudgetToolkit.renderGraph = function renderGraph(container, dailyCents) {
   const values = dates.map((date) => dailyCents[date] / 100);
 
   const canvas = document.createElement("canvas");
-  canvas.width = 300;
-  canvas.height = 150;
+  canvas.width = container.clientWidth || 600;
+  canvas.height = 160;
   container.appendChild(canvas);
 
   const ctx = canvas.getContext("2d");

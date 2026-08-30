@@ -1,18 +1,17 @@
 #budget-toolkit-panel {
-  position: fixed;
-  bottom: 16px;
-  right: 16px;
-  width: 340px;
-  max-height: 80vh;
-  overflow-y: auto;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 20px;
   background: #ffffff;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 13px;
   color: #0f172a;
-  z-index: 2147483647;
+}
+
+#budget-toolkit-panel * {
+  box-sizing: border-box;
 }
 
 #budget-toolkit-panel.budget-toolkit-collapsed .budget-toolkit-body {
@@ -37,15 +36,15 @@
 }
 
 .budget-toolkit-body {
-  padding: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 16px 20px;
 }
 
 .budget-toolkit-body section {
-  margin-bottom: 16px;
-}
-
-.budget-toolkit-body section:last-child {
-  margin-bottom: 0;
+  flex: 1 1 320px;
+  min-width: 0;
 }
 
 .budget-toolkit-body h3 {
@@ -56,10 +55,21 @@
   color: #64748b;
 }
 
+.budget-toolkit-graph canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
 .budget-toolkit-graph-caption {
   margin-top: 6px;
   font-size: 12px;
   color: #475569;
+}
+
+.budget-toolkit-totals-list {
+  max-height: 220px;
+  overflow-y: auto;
 }
 
 .budget-toolkit-total-row {
