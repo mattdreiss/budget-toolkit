@@ -6,58 +6,88 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Manifest V3 browser extension that augments the EveryDollar budgeting app (`https://www.everydollar.com/app/budget`) with two features it doesn't provide natively: a daily spending line graph, and user-defined "custom totals" that roll up arbitrary budget groups/items into a named sum. It makes no network calls of its own — it observes the page's own API responses and renders a floating panel from that data. Everything (including custom totals) is stored locally via `chrome.storage.local`.
 
+TypeScript throughout, arranged by domain-driven design. The scope is intentionally narrow — it only ever needs to work against one page (see `host_permissions` / `content_scripts.matches` in `manifest.json`) — so don't generalize the design beyond that.
+
 ## Commands
 
-There is no build step, package manager install, lint, or test suite yet — `mise.toml` pins `node`/`yarn` for future tooling, but nothing currently consumes them. To develop:
+```sh
+yarn install
+yarn build      # esbuild -> dist/ (what manifest.json actually loads)
+yarn dev        # same, watching
+yarn test       # vitest
+yarn typecheck  # tsc --noEmit
+```
 
-1. `chrome://extensions` → enable Developer mode → **Load unpacked** → select the repo root.
-2. After editing files, reload the extension in `chrome://extensions`, then reload the EveryDollar budget page.
+Load unpacked from the **repo root** (`manifest.json` is there), not `dist/`. `yarn build` must have run at least once or there is nothing to load. After a rebuild, reload the extension in `chrome://extensions`, then reload the EveryDollar tab.
+
+Yarn 4 is pinned via `packageManager`, with `nodeLinker: node-modules` in `.yarnrc.yml` (PnP needs extra wiring for tsc/vitest). esbuild is allowlisted in `dependenciesMeta` so its postinstall can fetch the platform binary — without that, `yarn build` fails on a fresh clone.
 
 ## Architecture
 
+Dependencies point inward: `presentation` and `infrastructure` → `application` → `domain`. The domain layer imports nothing from the others, and no layer but `infrastructure` touches `chrome.*` or EveryDollar's wire format. `src/entries/contentScript.ts` is the composition root — the only file that picks concrete adapters.
+
 ### Two-world script split (Manifest V3)
 
-- `src/inject/fetch-interceptor.js` runs in the page's **MAIN** world at `document_start`. It monkey-patches `window.fetch`; whenever a response URL matches `/app/api/budgets/{uuid}`, it clones the response, parses the JSON, and redispatches it as a `budget-toolkit:budget-detail` `CustomEvent` on `window`.
-- `src/content/*.js` run in the **isolated** content-script world at `document_idle`. They listen for that event and render the panel. The two worlds share `window` but not JS state or functions — the `CustomEvent` (carrying a structured-cloned JSON payload) is the only channel between them.
+This is the constraint that shapes the boundaries, and it's a hard one.
 
-### Global namespace, no bundler
+- `src/entries/mainWorld.ts` → `dist/main-world.js` runs in the page's **MAIN** world at `document_start`. It patches `window.fetch` and, on a response matching `/app/api/budgets/{uuid}`, redispatches the raw JSON as a `budget-toolkit:budget-detail` `CustomEvent`.
+- `src/entries/contentScript.ts` → `dist/content.js` runs in the **isolated** world at `document_idle`. It listens, maps to domain, and renders.
 
-There are no ES modules and no build step. `manifest.json` lists content-script files in an explicit load order, and every file attaches its exports to a single shared `window.BudgetToolkit` object — later files assume earlier ones already ran, so **file order in `manifest.json` matters**. `src/shared/*.js` are pure, DOM-free helpers (`budget-model.js` math, `format.js` formatting, `storage.js` `chrome.storage.local` wrappers); `src/content/*.js` do DOM/rendering and pull from `window.BudgetToolkit`.
+The two worlds share `window` but **no JS state or module instances** — they are separate bundles, and the `CustomEvent` payload is the only channel. It crosses as a structured clone, so it must stay plain JSON: raw DTO only, never domain objects. Keep the MAIN-world bundle dumb; anything richer there can't reach the content script anyway.
 
-### Data model (EveryDollar's own API shape)
+### The sign convention (read before touching any calculation)
 
-Budget detail: `{ date: "YYYY-MM-DD", groups: [{ label, type, budgetItems: [{ label, amountBudgeted, allocations: [{ date, amount, ... }] }] }] }`.
+EveryDollar's wire format signs amounts by direction:
 
-- All amounts are integer cents.
-- Allocation `amount` is **negative** for expense spend and **positive** for income — `computeDailySpend` negates it to get a positive "spent" value; `computeTotalForSelections` takes `Math.abs`. Preserve this sign convention when touching `budget-model.js`.
-- Group/item/allocation IDs are re-minted every month. Anything persisted across months (custom totals) therefore matches by category **label**, not ID — see `computeTotalForSelections` / `buildCategoryIndex` in `src/shared/budget-model.js`.
-- `dev/sample-data/*.json` are fabricated fixtures matching this shape (not real financial data), useful for reasoning about the model without a live account.
+| field | income | expense |
+|---|---|---|
+| `amountBudgeted` | positive | positive |
+| allocation `amount` | positive | **negative** |
+
+`src/infrastructure/everydollar/budgetMapper.ts` is the anti-corruption layer and the **only** place that knows this. It normalizes budgeted to a positive magnitude and keeps allocations as signed cash flow. Downstream, one accessor defines what actually happened:
+
+```
+BudgetItem.actual()  =  expense ? negate(sum(allocations)) : sum(allocations)
+```
+
+Positive always means "the expected direction for this kind" — spent for an expense, received for an income — and a refund (positive on an expense) correctly *reduces* spend.
+
+This matters because the pre-TypeScript build got it wrong twice: `computeDailySpend` summed *all* groups including income, so payday plotted as −$4,000 and the month totalled −$2,276 instead of $1,724; and custom totals used `Math.abs` while the graph used signed values, so the two disagreed about the same categories. Both are now regression-tested (`test/domain/spendSeries.test.ts`, `test/domain/customTotal.test.ts`). If you add a calculation, route it through `actual()` rather than re-deriving signs.
+
+### Identity is by label, not ID
+
+EveryDollar re-mints every group/item/allocation ID each month (`urn:everydollar:budget:{uuid}:item:{n}`). Anything that outlives a month boundary — i.e. a saved `CustomTotal` — matches on the category **label**. Never persist an EveryDollar ID.
+
+`CategorySelection`'s shape is also the persisted storage shape, unchanged from the pre-TypeScript build, so totals saved by older versions still resolve. Don't change it without a migration.
 
 ### EveryDollar's frontend: React, not Shadow DOM
 
-EveryDollar is a React SPA (confirmed via `__reactFiber$...` keys on its DOM nodes) using an internal component library whose elements are tagged with `data-eds-component="..."` attributes (e.g. `EDSPageLayout.Main`, `EDSAppLayout`, `EDSSideNavigation`) — those are useful, relatively stable selectors for locating anchor points in the rendered page. It does **not** use actual Shadow DOM (no element on the page has a `shadowRoot`), so there's no encapsulation boundary blocking our content scripts' CSS or DOM access.
+EveryDollar is a React SPA (confirmed via `__reactFiber$...` keys on its DOM nodes) using an internal component library whose elements are tagged `data-eds-component="..."` (e.g. `EDSPageLayout.Main`, `EDSAppLayout`, `EDSSideNavigation`) — useful, relatively stable selectors for anchoring to the page. It does **not** use Shadow DOM (no element on the page has a `shadowRoot`), so nothing blocks our CSS or DOM access.
 
-The relevant mechanic is React's **virtual DOM reconciliation**, not Shadow DOM: React owns the real DOM subtree under any container it renders into, and on every re-render it diffs its virtual tree against what it last rendered and mutates the real DOM to match — it has no awareness of nodes a content script inserted by hand. That means any element we `appendChild`/`prepend` as a child of a React-managed container (e.g. `[data-eds-component="EDSPageLayout.Main"]`) is invisible to React's diff and can be silently removed or reordered the next time that component re-renders, regardless of when or how we inserted it.
+The relevant mechanic is React's **virtual DOM reconciliation**. React owns the real DOM subtree under any container it renders into, and on each render it diffs against its own virtual tree and mutates the real DOM to match — it has no awareness of nodes a content script inserted by hand. So anything we `prepend` into a React-managed container can be silently removed or reordered on the next render.
 
-### Panel mounting
+### Panel mounting (known-imperfect)
 
-`panel.js` locates EveryDollar's page container (`[data-eds-component="EDSPageLayout.Main"]`) and uses a `MutationObserver` to keep the panel pinned as its first child, re-prepending on every SPA re-render. This is fighting React's reconciliation on every render, which is inherently racy — the most recent commit (`4b6d637`) notes the panel still gets overwritten in some cases. If debugging panel placement, don't reach for Shadow DOM–style encapsulation fixes; the fix more likely to hold is mounting the panel **outside** any React-owned subtree entirely (e.g. as a sibling of React's root container, positioned with CSS to appear at the top of the page) rather than as a child inside one, so there's no React re-render that can ever touch it.
+`src/presentation/mountPanel.ts` prepends the panel into `[data-eds-component="EDSPageLayout.Main"]` and uses a `MutationObserver` to re-pin it. That is fighting reconciliation on every render and is inherently racy — commit `4b6d637` notes the panel still gets overwritten. This was deliberately left as-is during the TypeScript port to keep that change reviewable.
 
-### Storage
+If you fix it: don't reach for Shadow DOM–style encapsulation. Mount **outside** any React-owned subtree entirely (a sibling of React's root, positioned with CSS) so no re-render can touch it.
 
-Only `chrome.storage.local` is used (`permissions: ["storage"]`), only for the `customTotals` array.
+## Testing
 
-## Project direction: TypeScript + DDD
+Vitest over `domain`, `application` and `infrastructure` — all DOM-free, so they run in plain Node. Presentation has no automated coverage; verify it in the real app.
 
-The current codebase (plain JS, global `window.BudgetToolkit` namespace, no build step) is the `v0.1.0` baseline, not the intended end state. New and changed code should be TypeScript, organized by domain-driven design:
+Tests go in through `toBudget` with wire-shaped payloads (`test/support/budgetBuilder.ts`) rather than constructing domain objects directly, so the sign conventions under test are the ones real payloads exercise. `dev/sample-data/*.json` are fabricated fixtures (not real financial data) matching EveryDollar's response shape, and double as the realistic test case.
 
-- **domain** — budget/category/custom-total concepts and pure logic (today's `src/shared/budget-model.js` is the closest existing analog). No DOM, no `chrome.*` APIs.
-- **application** — use-cases that orchestrate domain logic against ports (e.g. "compute this month's custom totals," "persist a custom total").
-- **infrastructure** — adapters to the outside world: the MAIN-world fetch interception, `chrome.storage.local`, DOM rendering.
-- **presentation** — the panel UI itself.
+## Documentation lives in `docs/`
 
-The extension's scope is intentionally narrow — it only ever needs to work against `https://www.everydollar.com/app/budget` (see `host_permissions` / `content_scripts.matches` in `manifest.json`) — so don't generalize the design beyond that single page. When a build step (bundler, `tsconfig`, etc.) is introduced, keep it minimal and update this file and the README's "Contributing" section (which currently advertises "no build step or dependencies required") to match.
+`docs/` is the home for **all** project-specific documentation: feature plans, testing plans, architecture decision records, investigation write-ups, API notes — anything worth keeping that isn't code.
 
-## Backlog
+When you produce a document of that kind, write it to `docs/` as Markdown rather than leaving it in the conversation or scattering it at the repo root. Read what's already there before planning a change; an existing document may already record the decision or constraint you're about to re-derive.
 
-`features-ideas.md` tracks ideas explicitly deferred from the initial build (alternate chart views, a local dev sandbox, a real icon) — check it before proposing new features to avoid duplicating known plans.
+`CLAUDE.md` and `README.md` stay at the root — they're entry points, not project documents. Keep `CLAUDE.md` about how to work in the repo and let `docs/` hold the depth.
+
+Currently: `docs/features-ideas.md` tracks ideas explicitly deferred (alternate chart views, a local dev sandbox, a real icon) — check it before proposing new features.
+
+## Do not commit
+
+**Never run `git commit` or `git push` in this repo.** The user will handle app commit operations.

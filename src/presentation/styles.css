@@ -96,6 +96,25 @@
   cursor: pointer;
 }
 
+.budget-toolkit-empty {
+  margin: 0;
+  padding: 6px 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+/* A total whose selections no longer all resolve; the title attribute says why. */
+.budget-toolkit-has-missing {
+  color: #b45309;
+  cursor: help;
+}
+
+.budget-toolkit-form-error {
+  margin: 8px 0 0;
+  color: #b91c1c;
+  font-size: 12px;
+}
+
 .budget-toolkit-checklist {
   max-height: 200px;
   overflow-y: auto;

@@ -8,22 +8,14 @@
   "content_scripts": [
     {
       "matches": ["https://www.everydollar.com/app/budget*"],
-      "js": ["src/inject/fetch-interceptor.js"],
+      "js": ["dist/main-world.js"],
       "world": "MAIN",
       "run_at": "document_start"
     },
     {
       "matches": ["https://www.everydollar.com/app/budget*"],
-      "js": [
-        "src/shared/format.js",
-        "src/shared/budget-model.js",
-        "src/shared/storage.js",
-        "src/content/graph.js",
-        "src/content/totals.js",
-        "src/content/panel.js",
-        "src/content/content-script.js"
-      ],
-      "css": ["src/content/styles.css"],
+      "js": ["dist/content.js"],
+      "css": ["dist/styles.css"],
       "run_at": "document_idle"
     }
   ]
