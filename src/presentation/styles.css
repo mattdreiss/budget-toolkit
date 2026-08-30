@@ -1,0 +1,324 @@
+/*
+ * The panel sits inside EveryDollar's own main column (see mountPanel.ts), so it
+ * is styled to read as one of their cards rather than as an overlay. The values
+ * below were sampled from the live app: cards are white with a 16px radius and
+ * no border or shadow, body text is #1F2426 on a #F5F7F8 page, secondary text is
+ * #495257, and interactive text is #0073B9. The typeface is inherited rather
+ * than declared — inheriting from their column picks up canada-type-gibson and
+ * keeps us correct if they change it.
+ *
+ * Everything inside the card is inset by 24px on every edge, and the card keeps
+ * 24px of clearance from what follows it, so the panel is framed the same way
+ * whichever side you measure from.
+ */
+#budget-toolkit-panel {
+  --budget-toolkit-inset: 24px;
+
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: var(--budget-toolkit-inset);
+  background: #ffffff;
+  border-radius: 16px;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+  color: #1f2426;
+}
+
+#budget-toolkit-panel * {
+  box-sizing: border-box;
+}
+
+#budget-toolkit-panel.budget-toolkit-collapsed .budget-toolkit-body {
+  display: none;
+}
+
+.budget-toolkit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--budget-toolkit-inset);
+  font-size: 20px;
+  font-weight: 600;
+  color: #1f2426;
+}
+
+/*
+ * The rule is drawn inside the 24px inset rather than across the full card, so
+ * the gutter reads as one continuous margin instead of being cut in half.
+ */
+#budget-toolkit-panel:not(.budget-toolkit-collapsed) .budget-toolkit-header {
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eef1f3;
+  margin: 0 var(--budget-toolkit-inset);
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.budget-toolkit-toggle {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 18px;
+  color: #0073b9;
+  cursor: pointer;
+  line-height: 1;
+}
+
+/* Stacked, not side by side: both sections want the panel's full width. */
+.budget-toolkit-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--budget-toolkit-inset);
+  padding: var(--budget-toolkit-inset);
+}
+
+.budget-toolkit-body section {
+  min-width: 0;
+}
+
+.budget-toolkit-body h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #495257;
+}
+
+/* The canvas sets its own height in px; width is driven entirely by the card. */
+.budget-toolkit-graph canvas {
+  display: block;
+  width: 100%;
+}
+
+.budget-toolkit-graph-caption {
+  margin-top: 8px;
+  font-size: 14px;
+  color: #495257;
+}
+
+/* ---- Section rows: name left, planned total right ---- */
+
+.budget-toolkit-sections {
+  display: flex;
+  flex-direction: column;
+}
+
+.budget-toolkit-section {
+  padding: 10px 0;
+  border-bottom: 1px solid #eef1f3;
+}
+
+.budget-toolkit-section:last-child {
+  border-bottom: none;
+}
+
+.budget-toolkit-section-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.budget-toolkit-section-name {
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2426;
+  text-align: left;
+  cursor: pointer;
+}
+
+.budget-toolkit-section-name:hover,
+.budget-toolkit-section-name:focus-visible {
+  color: #0073b9;
+  text-decoration: underline;
+}
+
+.budget-toolkit-section-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.budget-toolkit-section-note {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #495257;
+}
+
+/* A section whose items don't all resolve in the month on screen. */
+.budget-toolkit-has-missing {
+  color: #b45309;
+}
+
+/* ---- The edit window ---- */
+
+/*
+ * `showModal()` puts this in the top layer, so it needs no z-index and cannot be
+ * clipped by anything EveryDollar renders. The properties reset here are the
+ * ones the UA stylesheet sets on `dialog` (auto margins, a black border, and
+ * max sizes tied to the viewport).
+ */
+#budget-toolkit-section-editor {
+  width: min(420px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100vh - 64px);
+  margin: auto;
+  padding: 24px;
+  border: none;
+  border-radius: 16px;
+  background: #ffffff;
+  color: #1f2426;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+  box-shadow: 0 12px 32px rgba(31, 36, 38, 0.24);
+  overflow: visible;
+}
+
+/*
+ * The dialog itself is a container, not a control. Chrome focuses it when a
+ * click lands on its padding, and the resulting ring around the whole window
+ * reads as an error state rather than as focus. Suppressed here only — every
+ * control inside keeps its own visible focus.
+ */
+#budget-toolkit-section-editor:focus,
+#budget-toolkit-section-editor:focus-visible {
+  outline: none;
+}
+
+#budget-toolkit-section-editor::backdrop {
+  background: rgba(31, 36, 38, 0.4);
+}
+
+#budget-toolkit-section-editor * {
+  box-sizing: border-box;
+}
+
+.budget-toolkit-editor-title {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.budget-toolkit-editor-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.budget-toolkit-editor-empty {
+  margin: 0;
+  padding: 4px 0;
+  color: #495257;
+  font-size: 14px;
+}
+
+/* Delete first in source order, so it is to the left of the name it removes. */
+.budget-toolkit-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.budget-toolkit-editor-delete {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: #495257;
+  cursor: pointer;
+}
+
+.budget-toolkit-editor-delete:hover,
+.budget-toolkit-editor-delete:focus-visible {
+  background: #f5f7f8;
+  color: #c02b2b;
+}
+
+.budget-toolkit-editor-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 15px;
+  color: inherit;
+  background: #ffffff;
+  border: 1px solid #dfe4e7;
+  border-radius: 8px;
+}
+
+.budget-toolkit-editor-input:focus {
+  outline: none;
+  border-color: #0073b9;
+  box-shadow: 0 0 0 3px rgba(0, 115, 185, 0.16);
+}
+
+/* Typed a name this month's budget doesn't have. A warning, not a rejection. */
+.budget-toolkit-editor-unknown {
+  border-color: #e0a355;
+  background: #fdf7ee;
+}
+
+.budget-toolkit-editor-add {
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0073b9;
+  background: none;
+  border: 1px dashed #c3cbcf;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.budget-toolkit-editor-add:hover {
+  border-color: #0073b9;
+}
+
+.budget-toolkit-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.budget-toolkit-editor-actions button {
+  padding: 9px 18px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.budget-toolkit-editor-cancel {
+  color: #495257;
+  background: none;
+  border: 1px solid #dfe4e7;
+}
+
+.budget-toolkit-editor-save {
+  color: #ffffff;
+  background: #0073b9;
+  border: 1px solid #0073b9;
+}
+
+.budget-toolkit-editor-save:hover {
+  background: #005f99;
+  border-color: #005f99;
+}

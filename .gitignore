@@ -1,0 +1,8 @@
+.DS_Store
+node_modules/
+dist/
+
+# Yarn 4 (node-modules linker) — keep the lockfile, ignore the runtime.
+.yarn/*
+!.yarn/patches
+.pnp.*

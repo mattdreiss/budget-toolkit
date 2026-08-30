@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Budget Toolkit",
+  "version": "0.1.0",
+  "description": "Adds a spending graph and custom category totals to your EveryDollar budget.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://www.everydollar.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://www.everydollar.com/app/budget*"],
+      "js": ["dist/main-world.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://www.everydollar.com/app/budget*"],
+      "js": ["dist/content.js"],
+      "css": ["dist/styles.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
