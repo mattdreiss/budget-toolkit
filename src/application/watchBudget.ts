@@ -36,7 +36,10 @@ export class WatchBudget {
       this.emit();
     });
 
-    void this.customTotals.list().then((totals) => {
+    // `listWithDefaults` rather than `list`: the three sections are created on
+    // first run so the panel has something to show before the user has set
+    // anything up.
+    void this.customTotals.listWithDefaults().then((totals) => {
       this.totals = totals;
       this.emit();
     });

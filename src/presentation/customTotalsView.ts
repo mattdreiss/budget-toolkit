@@ -1,32 +1,29 @@
 import type { CustomTotalDraft, CustomTotalView } from "../application/manageCustomTotals.js";
 import type { Budget } from "../domain/budget/Budget.js";
 import type { CustomTotalResult } from "../domain/custom-total/calculator.js";
-import {
-  selectionKey,
-  type CategorySelection,
-} from "../domain/custom-total/CustomTotal.js";
+import { describeSelection } from "../domain/custom-total/CustomTotal.js";
+import { openSectionEditor } from "./sectionEditor.js";
 
 /** What the view needs from the outside world to persist a change. */
 export interface CustomTotalActions {
-  create(draft: CustomTotalDraft): Promise<void>;
   update(id: string, draft: CustomTotalDraft): Promise<void>;
-  remove(id: string): Promise<void>;
 }
 
-const NEW_TOTAL = Symbol("new custom total");
-type Editing = string | typeof NEW_TOTAL | null;
-
 /**
- * The custom totals section: a list of saved totals with their amounts, and an
- * inline form for adding or editing one.
+ * The totals section: one row per saved section, name hard left and planned
+ * total hard right, with the name itself opening the editor.
  *
- * Editing state lives here rather than in the application layer because it is
- * pure UI — a half-filled form is not something the rest of the app, or storage,
- * has any business knowing about. Keeping it on the instance means a re-render
- * triggered by fresh budget data does not close the form the user is typing in.
+ * The amount shown is the *planned* (budgeted) total, not what has been spent —
+ * these sections exist to answer "how much of this month's plan is Needs?",
+ * which is a question about the plan. `result.actual` is computed either way and
+ * rides along in the row's tooltip.
+ *
+ * There is no local editing state here any more: the editor is a modal that
+ * owns its own draft and hands back a finished set of selections. A re-render
+ * from fresh budget data therefore cannot disturb a half-typed form, because
+ * the form is not part of what gets re-rendered.
  */
 export class CustomTotalsView {
-  private editing: Editing = null;
   private budget: Budget | null = null;
   private totals: readonly CustomTotalView[] = [];
 
@@ -43,216 +40,91 @@ export class CustomTotalsView {
 
   private render(): void {
     if (!this.budget) return;
-    this.container.replaceChildren(this.renderList());
-
-    if (this.editing === null) {
-      this.container.append(this.renderAddButton());
-    } else {
-      this.container.append(this.renderForm());
-    }
+    this.container.replaceChildren(
+      ...this.totals.map((view) => this.renderRow(view)),
+    );
   }
 
-  private renderList(): HTMLElement {
-    const list = document.createElement("div");
-    list.className = "budget-toolkit-totals-list";
+  private renderRow({ total, result }: CustomTotalView): HTMLElement {
+    const section = document.createElement("div");
+    section.className = "budget-toolkit-section";
 
-    if (this.totals.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "budget-toolkit-empty";
-      empty.textContent = "No custom totals yet.";
-      list.append(empty);
-      return list;
-    }
+    // Name and amount are the only things on this line, so `space-between` puts
+    // one against each edge however wide the panel gets.
+    const row = document.createElement("div");
+    row.className = "budget-toolkit-section-row";
 
-    for (const { total, result } of this.totals) {
-      const row = document.createElement("div");
-      row.className = "budget-toolkit-total-row";
+    const name = document.createElement("button");
+    name.type = "button";
+    name.className = "budget-toolkit-section-name";
+    name.textContent = total.name;
+    name.title = `Edit which budget items make up ${total.name}`;
+    name.addEventListener("click", () => this.edit(total.id));
 
-      const name = document.createElement("span");
-      name.className = "budget-toolkit-total-name";
-      name.textContent = total.name;
+    const amount = document.createElement("span");
+    amount.className = "budget-toolkit-section-amount";
+    amount.textContent = result.budgeted.format();
+    amount.title = `Planned this month · ${actualLabel(result)} so far ${result.actual.format()}`;
 
-      const amounts = document.createElement("span");
-      amounts.className = "budget-toolkit-total-amounts";
-      amounts.textContent = `Budgeted ${result.budgeted.format()} · ${actualLabel(result)} ${result.actual.format()}`;
+    row.append(name, amount);
+    section.append(row);
+
+    // The note is a line of its own rather than a third flex child, so it
+    // cannot squeeze the amount away from the right-hand edge.
+    const note = describeProblem(total.selections.length, result);
+    if (note) {
+      const hint = document.createElement("p");
+      hint.className = "budget-toolkit-section-note";
+      hint.textContent = note;
       if (result.missing.length > 0) {
-        amounts.classList.add("budget-toolkit-has-missing");
-        amounts.title = describeMissing(result);
+        hint.classList.add("budget-toolkit-has-missing");
       }
-
-      row.append(name, amounts, this.editButton(total.id), this.deleteButton(total.id));
-      list.append(row);
+      section.append(hint);
     }
 
-    return list;
+    return section;
   }
 
-  private editButton(id: string): HTMLButtonElement {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = "Edit";
-    button.addEventListener("click", () => {
-      this.editing = id;
-      this.render();
-    });
-    return button;
-  }
-
-  private deleteButton(id: string): HTMLButtonElement {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = "Delete";
-    button.addEventListener("click", () => {
-      button.disabled = true;
-      void this.actions.remove(id);
-    });
-    return button;
-  }
-
-  private renderAddButton(): HTMLButtonElement {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "budget-toolkit-add-total";
-    button.textContent = "+ New Total";
-    button.addEventListener("click", () => {
-      this.editing = NEW_TOTAL;
-      this.render();
-    });
-    return button;
-  }
-
-  private renderForm(): HTMLFormElement {
+  private edit(id: string): void {
     const budget = this.budget;
-    const existing =
-      typeof this.editing === "string"
-        ? (this.totals.find((view) => view.total.id === this.editing)?.total ?? null)
-        : null;
+    const total = this.totals.find((view) => view.total.id === id)?.total;
+    if (!budget || !total) return;
 
-    const form = document.createElement("form");
-    form.className = "budget-toolkit-total-form";
-
-    const nameInput = document.createElement("input");
-    nameInput.type = "text";
-    nameInput.placeholder = "Total name";
-    nameInput.value = existing?.name ?? "";
-    form.append(nameInput);
-
-    const selected = new Set(
-      (existing?.selections ?? []).map((selection) => selectionKey(selection)),
-    );
-    const checklist = buildChecklist(budget, selected);
-    form.append(checklist);
-
-    const submit = document.createElement("button");
-    submit.type = "submit";
-    submit.textContent = existing ? "Save changes" : "Create total";
-    form.append(submit);
-
-    const cancel = document.createElement("button");
-    cancel.type = "button";
-    cancel.textContent = "Cancel";
-    cancel.addEventListener("click", () => {
-      this.editing = null;
-      this.render();
+    openSectionEditor({
+      name: total.name,
+      selections: total.selections,
+      availableItemLabels: budget.itemLabels(),
+      onSave: (selections) => {
+        void this.actions.update(total.id, { name: total.name, selections });
+      },
     });
-    form.append(cancel);
-
-    const error = document.createElement("p");
-    error.className = "budget-toolkit-form-error";
-    error.hidden = true;
-    form.append(error);
-
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-
-      const draft: CustomTotalDraft = {
-        name: nameInput.value.trim(),
-        selections: readSelections(checklist),
-      };
-
-      // The old build silently did nothing here, which read as a broken button.
-      if (draft.name === "") return fail(error, "Give the total a name.");
-      if (draft.selections.length === 0) return fail(error, "Pick at least one category.");
-
-      error.hidden = true;
-      submit.disabled = true;
-      this.editing = null;
-
-      void (existing
-        ? this.actions.update(existing.id, draft)
-        : this.actions.create(draft));
-    });
-
-    return form;
   }
 }
 
-function fail(error: HTMLElement, message: string): void {
-  error.textContent = message;
-  error.hidden = false;
+/**
+ * The row's second line, when there is something to say: either the section is
+ * empty and needs setting up, or some of its items are not in this month.
+ */
+function describeProblem(
+  selectionCount: number,
+  result: CustomTotalResult,
+): string | null {
+  if (selectionCount === 0) return "No budget items yet — click the name to add some";
+  if (result.missing.length === 0) return null;
+
+  const names = result.missing.map(describeSelection).join(", ");
+  return `Not in this month's budget: ${names}`;
 }
 
-function buildChecklist(budget: Budget | null, selected: ReadonlySet<string>): HTMLElement {
-  const checklist = document.createElement("div");
-  checklist.className = "budget-toolkit-checklist";
-  if (!budget) return checklist;
-
-  for (const { groupLabel, itemLabels } of budget.categoryIndex()) {
-    checklist.append(
-      checkbox(
-        { type: "group", groupLabel },
-        `${groupLabel} (whole group)`,
-        selected,
-        false,
-      ),
-    );
-
-    for (const itemLabel of itemLabels) {
-      checklist.append(
-        checkbox({ type: "item", groupLabel, itemLabel }, itemLabel, selected, true),
-      );
-    }
-  }
-
-  return checklist;
-}
-
-function checkbox(
-  selection: CategorySelection,
-  text: string,
-  selected: ReadonlySet<string>,
-  nested: boolean,
-): HTMLLabelElement {
-  const label = document.createElement("label");
-  if (nested) label.className = "budget-toolkit-checklist-item";
-
-  const input = document.createElement("input");
-  input.type = "checkbox";
-  input.checked = selected.has(selectionKey(selection));
-  // Stashed as JSON so reading the form back needs no parallel bookkeeping.
-  input.dataset["selection"] = JSON.stringify(selection);
-
-  label.append(input, ` ${text}`);
-  return label;
-}
-
-function readSelections(checklist: HTMLElement): CategorySelection[] {
-  const checked = checklist.querySelectorAll<HTMLInputElement>(
-    "input[type=checkbox]:checked",
-  );
-  return [...checked].flatMap((input) => {
-    const raw = input.dataset["selection"];
-    return raw ? [JSON.parse(raw) as CategorySelection] : [];
-  });
-}
-
+/** How to read `result.actual` for what this section turned out to contain. */
 function actualLabel(result: CustomTotalResult): string {
   if (result.kinds.length !== 1) return "Net";
-  return result.kinds[0] === "income" ? "Received" : "Spent";
-}
-
-function describeMissing(result: CustomTotalResult): string {
-  const count = result.missing.length;
-  const noun = count === 1 ? "category" : "categories";
-  return `${count} selected ${noun} not found in this month's budget`;
+  switch (result.kinds[0]) {
+    case "income":
+      return "Received";
+    case "savings":
+      return "Saved";
+    default:
+      return "Spent";
+  }
 }

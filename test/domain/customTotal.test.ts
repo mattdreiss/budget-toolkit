@@ -10,9 +10,20 @@ const total = (name: string, selections: CustomTotal["selections"]) =>
   new CustomTotal("test-id", name, selections);
 
 describe("CustomTotal", () => {
-  it("rejects a total with no name or no categories", () => {
+  it("rejects a total with no name", () => {
     expect(() => total("  ", [{ type: "group", groupLabel: "Food" }])).toThrow();
-    expect(() => total("Empty", [])).toThrow();
+  });
+
+  /**
+   * The three sections are seeded empty on first run so the user has something
+   * to click, so "no categories" has to be a legal state. It used to throw.
+   */
+  it("allows a total with no categories, and totals it as nothing", () => {
+    const empty = total("Wants", []);
+    const result = computeCustomTotal(toBudget(fixture), empty);
+
+    expect(result.budgeted.format()).toBe("$0.00");
+    expect(result.missing).toHaveLength(0);
   });
 
   it("drops duplicate selections on create", () => {
@@ -73,6 +84,63 @@ describe("computeCustomTotal", () => {
 
     expect(result.budgeted.format()).toBe("$700.00");
     expect(result.actual.format()).toBe("$179.00");
+  });
+
+  describe("name-only selections", () => {
+    it("resolves an item typed by name, with no group to go on", () => {
+      const result = computeCustomTotal(budget, total("Needs", [
+        { type: "itemByLabel", itemLabel: "Groceries" },
+        { type: "itemByLabel", itemLabel: "Rent" },
+      ]));
+
+      expect(result.budgeted.format()).toBe("$2,000.00");
+      expect(result.missing).toHaveLength(0);
+    });
+
+    /**
+     * The reason a name-only selection is worth having: EveryDollar lets an item
+     * be dragged into a different group, and the section should not quietly
+     * empty itself when that happens.
+     */
+    it("keeps resolving after the item moves to another group", () => {
+      const saved = total("Needs", [{ type: "itemByLabel", itemLabel: "Groceries" }]);
+
+      const moved = toBudget(
+        budgetDetail("2026-02-01", [
+          group("Household", [
+            item("Groceries", {
+              amountBudgeted: 45000,
+              allocations: [allocation("2026-02-03", -20000)],
+            }),
+          ]),
+        ]),
+      );
+
+      const result = computeCustomTotal(moved, saved);
+      expect(result.budgeted.format()).toBe("$450.00");
+      expect(result.actual.format()).toBe("$200.00");
+      expect(result.missing).toHaveLength(0);
+    });
+
+    it("counts the same line once when reached by name and by group", () => {
+      const result = computeCustomTotal(budget, total("Overlapping", [
+        { type: "group", groupLabel: "Food" },
+        { type: "itemByLabel", itemLabel: "Groceries" },
+      ]));
+
+      expect(result.budgeted.format()).toBe("$700.00");
+    });
+
+    it("reports a name that is not in this month's budget", () => {
+      const result = computeCustomTotal(budget, total("Needs", [
+        { type: "itemByLabel", itemLabel: "Gym membership" },
+      ]));
+
+      expect(result.missing).toEqual([
+        { type: "itemByLabel", itemLabel: "Gym membership" },
+      ]);
+      expect(result.budgeted.isZero()).toBe(true);
+    });
   });
 
   it("reports selections that no longer resolve, and still totals the rest", () => {

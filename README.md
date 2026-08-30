@@ -2,16 +2,16 @@
 
 A browser extension that adds two things to [EveryDollar](https://www.everydollar.com/app/budget) that the app doesn't provide natively:
 
-1. **A spending graph** — a line chart of net amount spent per day for the month you're currently viewing.
-2. **Custom totals** — roll up any combination of budget groups/items into a named total (e.g. "Discretionary" = Restaurants + Entertainment + Clothing) that's saved locally and automatically reappears every time you log in, even as your budget moves into a new month.
+1. **A spending graph** — a full-width line chart of the amount spent per day for the month you're currently viewing. Income and savings are left out, so it shows what you actually spent rather than everything that moved.
+2. **Sections** — "Savings", "Needs" and "Wants" to start with, each totalling up what you've *planned* across a set of budget items (e.g. Needs = Rent + Groceries + Utilities). Click a section's name to type in the items it contains. Sections are saved locally and reappear every time you log in, even as your budget moves into a new month.
 
 ## How it works
 
 EveryDollar is a single-page app. When you view a budget it calls its own internal API (`/app/api/budgets/{uuid}`) to fetch that month's groups, items, and transactions. Budget Toolkit doesn't call any API on its own or send your data anywhere — instead, a content script observes the same network responses the page already loads, and renders a small floating panel using that data.
 
-Everything — including your saved custom totals — is stored in your browser via `chrome.storage.local`. Nothing leaves your machine.
+Everything — including your sections — is stored in your browser via `chrome.storage.local`. Nothing leaves your machine.
 
-Because EveryDollar mints a new internal ID for every budget item each month, custom totals are matched by **category name** (e.g. "Groceries"), not by ID, so a saved total keeps working automatically as you move from month to month.
+Because EveryDollar mints a new internal ID for every budget item each month, sections are matched by **item name** (e.g. "Groceries"), not by ID, so a section keeps working automatically as you move from month to month. If an item you listed isn't in the month you're looking at, the section says so under its name and still totals the rest — it starts counting again the month that item comes back.
 
 ## Installing (unpacked, for now)
 
@@ -41,6 +41,8 @@ The extension ships as two independent bundles because its two content scripts r
 ### A note on amounts
 
 EveryDollar reports every amount in integer cents, and signs them by direction: allocations are negative for money spent and positive for money received, while budgeted amounts are always positive. That convention is translated in exactly one place — `src/infrastructure/everydollar/budgetMapper.ts` — so the rest of the code never has to reason about it.
+
+The same file also decides which categories count as savings rather than spending, which is less obvious than it sounds: on the wire a transfer to a sinking fund is indistinguishable from an expense. See [`docs/savings-classification.md`](docs/savings-classification.md).
 
 ## Contributing
 

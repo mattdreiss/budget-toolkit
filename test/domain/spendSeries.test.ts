@@ -21,6 +21,62 @@ describe("computeDailySpend", () => {
     expect(spend.total().format()).toBe("$1,724.00");
   });
 
+  /**
+   * Savings is money moved, not money gone. A transfer to a sinking fund looks
+   * exactly like an expense on the wire — a negative allocation — so nothing but
+   * the kind keeps it off the spending line.
+   */
+  it("excludes savings, so a transfer to a fund is not counted as spending", () => {
+    const spend = spendFor(
+      budgetDetail("2026-03-01", [
+        group("Food", [
+          item("Groceries", { allocations: [allocation("2026-03-05", -4000)] }),
+        ]),
+        group(
+          "Savings",
+          [item("Emergency Fund", { allocations: [allocation("2026-03-05", -50000)] })],
+          "savings",
+        ),
+      ]),
+    );
+
+    expect(spend.days.find((day) => day.date === "2026-03-05")?.amount.format()).toBe("$40.00");
+    expect(spend.total().format()).toBe("$40.00");
+  });
+
+  /**
+   * The case that actually happens: EveryDollar types its groups only `income`
+   * or `expense`, so a savings group arrives claiming to be an expense and only
+   * its name gives it away.
+   */
+  it("excludes a group named Savings even when the wire types it as an expense", () => {
+    const spend = spendFor(
+      budgetDetail("2026-03-01", [
+        group("Savings", [
+          item("Emergency Fund", { allocations: [allocation("2026-03-05", -50000)] }),
+        ]),
+        group("Food", [
+          item("Groceries", { allocations: [allocation("2026-03-05", -4000)] }),
+        ]),
+      ]),
+    );
+
+    expect(spend.total().format()).toBe("$40.00");
+  });
+
+  /** The name match is anchored, so an ordinary expense that merely mentions savings stays in. */
+  it("keeps a group whose name only contains the word savings", () => {
+    const spend = spendFor(
+      budgetDetail("2026-03-01", [
+        group("Savings Account Fees", [
+          item("Monthly fee", { allocations: [allocation("2026-03-05", -500)] }),
+        ]),
+      ]),
+    );
+
+    expect(spend.total().format()).toBe("$5.00");
+  });
+
   it("covers every day of the month, including days with no activity", () => {
     const spend = spendFor(fixture);
 

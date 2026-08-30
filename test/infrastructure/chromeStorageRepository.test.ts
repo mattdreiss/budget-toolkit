@@ -65,14 +65,40 @@ describe("ChromeStorageCustomTotalRepository", () => {
     const { area } = fakeStorage({
       customTotals: [
         { id: "good", name: "Keep me", selections: [{ type: "group", groupLabel: "Food" }] },
-        { id: "no-selections", name: "Broken", selections: [] },
-        { id: "bad-selection", name: "Broken", selections: [{ type: "item", groupLabel: "Food" }] },
+        { id: "by-name", name: "Needs", selections: [{ type: "itemByLabel", itemLabel: "Rent" }] },
+        { id: "no-name", selections: [{ type: "group", groupLabel: "Food" }] },
         { name: "missing id", selections: [{ type: "group", groupLabel: "Food" }] },
         null,
       ],
     });
 
     const totals = await new ChromeStorageCustomTotalRepository(area).list();
-    expect(totals.map((total) => total.id)).toEqual(["good"]);
+    expect(totals.map((total) => total.id)).toEqual(["good", "by-name"]);
+  });
+
+  /**
+   * A record is only as broken as its worst part. An empty section is now a
+   * legal state (the seeded ones start that way), and a malformed selection
+   * costs the user that one selection rather than the whole section.
+   */
+  it("keeps a total whose selections are empty or partly malformed", async () => {
+    const { area } = fakeStorage({
+      customTotals: [
+        { id: "empty", name: "Wants", selections: [] },
+        {
+          id: "partly-bad",
+          name: "Needs",
+          selections: [
+            { type: "itemByLabel", itemLabel: "Rent" },
+            { type: "item", groupLabel: "Food" },
+          ],
+        },
+      ],
+    });
+
+    const totals = await new ChromeStorageCustomTotalRepository(area).list();
+    expect(totals.map((total) => total.id)).toEqual(["empty", "partly-bad"]);
+    expect(totals[0]?.selections).toHaveLength(0);
+    expect(totals[1]?.selections).toEqual([{ type: "itemByLabel", itemLabel: "Rent" }]);
   });
 });

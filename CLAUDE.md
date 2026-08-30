@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-A Manifest V3 browser extension that augments the EveryDollar budgeting app (`https://www.everydollar.com/app/budget`) with two features it doesn't provide natively: a daily spending line graph, and user-defined "custom totals" that roll up arbitrary budget groups/items into a named sum. It makes no network calls of its own — it observes the page's own API responses and renders a floating panel from that data. Everything (including custom totals) is stored locally via `chrome.storage.local`.
+A Manifest V3 browser extension that augments the EveryDollar budgeting app (`https://www.everydollar.com/app/budget`) with two features it doesn't provide natively: a daily spending line graph, and named **sections** — "Savings", "Needs", "Wants" out of the box — that roll up arbitrary budget items into one planned total. It makes no network calls of its own — it observes the page's own API responses and renders a panel from that data. Everything (including the sections) is stored locally via `chrome.storage.local`.
+
+A section is a `CustomTotal` in the code; "section" is only what the UI calls it. The three defaults are seeded on first run by `ManageCustomTotals.listWithDefaults()`, matched by name so seeding is idempotent, and are ordinary totals thereafter — nothing downstream treats them as built in.
 
 TypeScript throughout, arranged by domain-driven design. The scope is intentionally narrow — it only ever needs to work against one page (see `host_permissions` / `content_scripts.matches` in `manifest.json`) — so don't generalize the design beyond that.
 
@@ -39,18 +41,20 @@ The two worlds share `window` but **no JS state or module instances** — they a
 
 EveryDollar's wire format signs amounts by direction:
 
-| field | income | expense |
-|---|---|---|
-| `amountBudgeted` | positive | positive |
-| allocation `amount` | positive | **negative** |
+| field | income | expense | savings |
+|---|---|---|---|
+| `amountBudgeted` | positive | positive | positive |
+| allocation `amount` | positive | **negative** | **negative** |
 
 `src/infrastructure/everydollar/budgetMapper.ts` is the anti-corruption layer and the **only** place that knows this. It normalizes budgeted to a positive magnitude and keeps allocations as signed cash flow. Downstream, one accessor defines what actually happened:
 
 ```
-BudgetItem.actual()  =  expense ? negate(sum(allocations)) : sum(allocations)
+BudgetItem.actual()  =  isOutflow(kind) ? negate(sum(allocations)) : sum(allocations)
 ```
 
-Positive always means "the expected direction for this kind" — spent for an expense, received for an income — and a refund (positive on an expense) correctly *reduces* spend.
+Positive always means "the expected direction for this kind" — spent for an expense, set aside for a savings line, received for an income — and a refund (positive on an expense) correctly *reduces* spend.
+
+Savings is a third `CategoryKind`, not a flag on `expense`, so that `Budget.expenseItems()` means precisely "the lines the spending graph plots". Nothing on the wire distinguishes a savings transfer from an expense, so the mapper leans on the group's *label* as well as its `type` — the reasoning, and the one open question, are in `docs/savings-classification.md`. Read that before touching `toKind`/`toItemKind`.
 
 This matters because the pre-TypeScript build got it wrong twice: `computeDailySpend` summed *all* groups including income, so payday plotted as −$4,000 and the month totalled −$2,276 instead of $1,724; and custom totals used `Math.abs` while the graph used signed values, so the two disagreed about the same categories. Both are now regression-tested (`test/domain/spendSeries.test.ts`, `test/domain/customTotal.test.ts`). If you add a calculation, route it through `actual()` rather than re-deriving signs.
 
@@ -58,7 +62,12 @@ This matters because the pre-TypeScript build got it wrong twice: `computeDailyS
 
 EveryDollar re-mints every group/item/allocation ID each month (`urn:everydollar:budget:{uuid}:item:{n}`). Anything that outlives a month boundary — i.e. a saved `CustomTotal` — matches on the category **label**. Never persist an EveryDollar ID.
 
-`CategorySelection`'s shape is also the persisted storage shape, unchanged from the pre-TypeScript build, so totals saved by older versions still resolve. Don't change it without a migration.
+`CategorySelection` is also the persisted storage shape, so it is **append-only**. It has three variants:
+
+- `itemByLabel` — what the editor writes now. The user types an item name and nothing else, so there is no group to record; it resolves against every group, which also means an item dragged between groups keeps counting.
+- `group` and `item` — written by earlier versions. Still read, still resolved, still tested. Don't remove them without a migration; there is saved data in this shape.
+
+A selection that resolves to nothing is reported in `CustomTotalResult.missing` and surfaced under the section name, rather than dropped — the category may well be back next month.
 
 ### EveryDollar's frontend: React, not Shadow DOM
 
@@ -77,11 +86,21 @@ Contrary to what this file used to say, React does *not* evict foreign children 
 
 No delay or readiness gate is needed, and adding one is a step backwards: a `MutationObserver` callback is delivered after the task that mutated the DOM, React's commit phase is synchronous, and microtasks run before paint — so the callback already means "React finished this commit" and re-placing there can't flicker.
 
+### Panel layout
+
+The panel is a single column: chart on top at the card's full width, section rows beneath it. A `--budget-toolkit-inset` of 24px is the one spacing value — header padding, body padding, and the card's own bottom margin all come from it.
+
+The chart is a `<canvas>`, which has a fixed pixel buffer, so "full width" is not something CSS alone can hold. `spendChart.ts` keeps the last series in a `WeakMap` and redraws from a `ResizeObserver`; the buffer is sized in device pixels and scaled down in CSS so the line stays sharp. Sizing it once at `document_idle` is not enough — the column has not necessarily reached its final width by then.
+
+The section editor (`sectionEditor.ts`) is a `<dialog>` opened with `showModal()` and appended to `<body>`, deliberately outside the panel. The top layer clears every stacking context EveryDollar could create, so there is no z-index to lose, and focus trapping and Escape-to-close come from the platform. Being on `<body>` also keeps it out of the container React intermittently replaces.
+
 ## Testing
 
 Vitest over `domain`, `application` and `infrastructure` — all DOM-free, so they run in plain Node. Presentation has no automated coverage; verify it in the real app.
 
 Tests go in through `toBudget` with wire-shaped payloads (`test/support/budgetBuilder.ts`) rather than constructing domain objects directly, so the sign conventions under test are the ones real payloads exercise. `dev/sample-data/*.json` are fabricated fixtures (not real financial data) matching EveryDollar's response shape, and double as the realistic test case.
+
+**The fixtures are fabricated, so they confirm our beliefs about the wire format rather than test them.** Two of those beliefs have already turned out to be load-bearing and unverified: the allocation date format (`docs/allocation-dates.md`) and how savings is typed (`docs/savings-classification.md`). When a calculation depends on the shape of a field rather than on its value, prefer a mapper that normalises and throws over one that trusts — a wrong assumption should produce a logged error, not a plausible number.
 
 ## Documentation lives in `docs/`
 
@@ -91,7 +110,11 @@ When you produce a document of that kind, write it to `docs/` as Markdown rather
 
 `CLAUDE.md` and `README.md` stay at the root — they're entry points, not project documents. Keep `CLAUDE.md` about how to work in the repo and let `docs/` hold the depth.
 
-Currently: `docs/features-ideas.md` tracks ideas explicitly deferred (alternate chart views, a local dev sandbox, a real icon) — check it before proposing new features.
+Currently:
+- `docs/features-ideas.md` tracks ideas explicitly deferred (alternate chart views, a local dev sandbox, a real icon) — check it before proposing new features.
+- `docs/panel-mounting.md` — why the panel used to vanish, and what actually fixes it.
+- `docs/savings-classification.md` — how savings is told apart from spending, and the one assumption in it that still needs confirming against a live payload. Includes a console snippet that reports the payload's shape without exposing any amounts.
+- `docs/allocation-dates.md` — why allocation dates are normalised in the mapper, and why the daily-spend bucketing fails silently if they are not.
 
 ## Do not commit
 

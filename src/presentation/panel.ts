@@ -4,7 +4,14 @@ export interface Panel {
   readonly totalsContainer: HTMLElement;
 }
 
-/** Builds the panel shell: a collapsible header and the two feature sections. */
+/**
+ * Builds the panel shell: a collapsible header over two stacked sections.
+ *
+ * Stacked rather than side by side because both features want the full width —
+ * the chart plots a data point per day and gets cramped in a column, and the
+ * section rows put the name hard left and the total hard right, which only
+ * reads as a total when there is real distance between them.
+ */
 export function createPanel(): Panel {
   const root = document.createElement("div");
   root.id = "budget-toolkit-panel";
@@ -13,7 +20,7 @@ export function createPanel(): Panel {
   body.className = "budget-toolkit-body";
 
   const chart = section("Spending this month", "budget-toolkit-graph");
-  const totals = section("Custom Totals");
+  const totals = section("Totals", "budget-toolkit-sections");
 
   body.append(chart.element, totals.element);
   root.append(createHeader(root), body);

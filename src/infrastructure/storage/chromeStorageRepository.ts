@@ -68,13 +68,26 @@ function deserialize(record: unknown): CustomTotal | null {
   }
 }
 
+/**
+ * Validates one persisted selection, per variant.
+ *
+ * All three variants are accepted, not just the one the editor writes today:
+ * `group` and `item` records are still sitting in users' storage from earlier
+ * versions, and silently discarding them would empty a section that had been
+ * working fine.
+ */
 function isSelection(value: unknown): value is CategorySelection {
   if (typeof value !== "object" || value === null) return false;
-  const selection = value as Partial<CategorySelection>;
-  if (typeof selection.groupLabel !== "string") return false;
+  const { type, groupLabel, itemLabel } = value as Record<string, unknown>;
 
-  return selection.type === "group"
-    ? true
-    : selection.type === "item" &&
-        typeof (selection as { itemLabel?: unknown }).itemLabel === "string";
+  switch (type) {
+    case "group":
+      return typeof groupLabel === "string";
+    case "item":
+      return typeof groupLabel === "string" && typeof itemLabel === "string";
+    case "itemByLabel":
+      return typeof itemLabel === "string";
+    default:
+      return false;
+  }
 }

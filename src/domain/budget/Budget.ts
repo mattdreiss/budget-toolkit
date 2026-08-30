@@ -2,10 +2,21 @@ import { Money } from "../shared/Money.js";
 import { MonthKey, type IsoDate } from "../shared/MonthKey.js";
 
 /**
- * Whether a category takes money in or pays it out. This drives the sign rule
- * below, so it has to survive the trip through the mapper — it is not cosmetic.
+ * What a category does with money. This drives the sign rule below, so it has
+ * to survive the trip through the mapper — it is not cosmetic.
+ *
+ * `savings` is money moving out of the checking account exactly like an expense
+ * — same negative allocations, same "positive means it happened" orientation —
+ * but it is not *spending*, so the graph leaves it out. Keeping it as its own
+ * kind rather than a flag on `expense` is what lets `expenseItems()` mean
+ * precisely "the lines the spending graph plots".
  */
-export type CategoryKind = "income" | "expense";
+export type CategoryKind = "income" | "expense" | "savings";
+
+/** Kinds whose allocations are money leaving the account, and so arrive negative. */
+export function isOutflow(kind: CategoryKind): boolean {
+  return kind === "expense" || kind === "savings";
+}
 
 /** A single dated movement of money against a budget item. */
 export class Allocation {
@@ -38,7 +49,7 @@ export class BudgetItem {
   /**
    * What actually happened on this line, oriented so that positive always means
    * "the expected direction for this kind of category": money spent on an
-   * expense, money received on an income.
+   * expense, money set aside on a savings line, money received on an income.
    *
    * This is the single definition of "actual" in the app. Both the spending
    * graph and custom totals go through it, which is what stops them from
@@ -47,7 +58,7 @@ export class BudgetItem {
    */
   actual(): Money {
     const net = Money.sum(this.allocations.map((allocation) => allocation.amount));
-    return this.kind === "expense" ? net.negate() : net;
+    return isOutflow(this.kind) ? net.negate() : net;
   }
 
   /** `actual()` restricted to one day. */
@@ -57,7 +68,7 @@ export class BudgetItem {
         .filter((allocation) => allocation.date === date)
         .map((allocation) => allocation.amount),
     );
-    return this.kind === "expense" ? net.negate() : net;
+    return isOutflow(this.kind) ? net.negate() : net;
   }
 }
 
@@ -89,8 +100,17 @@ export class Budget {
     return this.groups.flatMap((group) => [...group.items]);
   }
 
+  /**
+   * The lines that count as spending: expenses only. Income is not spending,
+   * and neither is savings — money moved to a fund has not left the household.
+   */
   expenseItems(): BudgetItem[] {
     return this.items().filter((item) => item.kind === "expense");
+  }
+
+  /** Every distinct item label in the budget, for the section editor's autocomplete. */
+  itemLabels(): string[] {
+    return [...new Set(this.items().map((item) => item.label))];
   }
 
   /** Group and item labels, for building the custom-total picker. */

@@ -31,25 +31,14 @@ export function computeCustomTotal(
   const missing: CategorySelection[] = [];
 
   for (const selection of customTotal.selections) {
-    const group = budget.findGroup(selection.groupLabel);
-    if (!group) {
+    // Keyed by group *and* item so the same name appearing under two groups is
+    // two lines, while the same line reached two ways is still one.
+    const matches = resolve(budget, selection);
+    if (matches === null) {
       missing.push(selection);
       continue;
     }
-
-    if (selection.type === "group") {
-      for (const item of group.items) {
-        resolved.set(`${group.label}::${item.label}`, item);
-      }
-      continue;
-    }
-
-    const item = group.findItem(selection.itemLabel);
-    if (!item) {
-      missing.push(selection);
-      continue;
-    }
-    resolved.set(`${group.label}::${item.label}`, item);
+    for (const [key, item] of matches) resolved.set(key, item);
   }
 
   const items = [...resolved.values()];
@@ -59,4 +48,42 @@ export function computeCustomTotal(
     kinds: [...new Set(items.map((item) => item.kind))],
     missing,
   };
+}
+
+/**
+ * Every budget line a selection points at, keyed for de-duplication, or `null`
+ * if the selection does not resolve at all this month.
+ *
+ * `null` and `[]` are deliberately different answers: a group that exists but
+ * happens to be empty contributes nothing and is *not* a stale selection, while
+ * a group or item that has been renamed away is.
+ */
+function resolve(
+  budget: Budget,
+  selection: CategorySelection,
+): [string, BudgetItem][] | null {
+  // A name-only selection has no group to look in, so it sweeps the budget and
+  // picks up every line with that name — which is also what makes it survive
+  // the user moving an item from one group to another.
+  if (selection.type === "itemByLabel") {
+    const matches = budget.groups.flatMap((group) =>
+      group.items
+        .filter((item) => item.label === selection.itemLabel)
+        .map((item): [string, BudgetItem] => [`${group.label}::${item.label}`, item]),
+    );
+    return matches.length > 0 ? matches : null;
+  }
+
+  const group = budget.findGroup(selection.groupLabel);
+  if (!group) return null;
+
+  if (selection.type === "group") {
+    return group.items.map((item): [string, BudgetItem] => [
+      `${group.label}::${item.label}`,
+      item,
+    ]);
+  }
+
+  const item = group.findItem(selection.itemLabel);
+  return item ? [[`${group.label}::${item.label}`, item]] : null;
 }

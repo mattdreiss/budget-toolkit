@@ -24,10 +24,13 @@ export function allocation(
   return { id: nextId("allocation"), date, amount, label, merchant: label };
 }
 
+/** The `type` values EveryDollar puts on a group or item. */
+export type WireKind = "income" | "expense" | "savings";
+
 export function item(
   label: string,
   options: {
-    type?: "income" | "expense";
+    type?: WireKind;
     amountBudgeted?: number;
     allocations?: AllocationDto[];
   } = {},
@@ -45,7 +48,7 @@ export function item(
 export function group(
   label: string,
   items: BudgetItemDto[],
-  type: "income" | "expense" = "expense",
+  type: WireKind = "expense",
 ): BudgetGroupDto {
   return { id: nextId("group"), label, type, budgetItems: items };
 }

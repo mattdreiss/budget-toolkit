@@ -19,9 +19,15 @@ export class SpendSeries {
 /**
  * Net expense spending per day, across the whole month.
  *
- * Only expense items count. Income is excluded rather than netted off: this is
- * a *spending* graph, and folding a paycheck in produced a huge negative spike
- * on payday and a monthly total that was understated by total income.
+ * Only expense items count. Income and savings are excluded rather than netted
+ * off, because neither is spending: folding a paycheck in produced a huge
+ * negative spike on payday and a monthly total understated by total income,
+ * and a transfer to a sinking fund is money moved, not money gone.
+ *
+ * The result reads positive for an ordinary day — allocations arrive negative
+ * for an outflow and are subtracted here — so the line plots upward as spending
+ * rises. It can still dip below zero on a day dominated by refunds, which is
+ * correct and deliberately not clamped away.
  *
  * Every day of the month is present, including days with no activity, so the
  * chart's x-axis is a real calendar rather than only the days that happen to

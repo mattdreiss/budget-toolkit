@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { BudgetSource, CustomTotalRepository } from "../../src/application/ports.js";
-import { ManageCustomTotals } from "../../src/application/manageCustomTotals.js";
+import {
+  DEFAULT_SECTION_NAMES,
+  ManageCustomTotals,
+} from "../../src/application/manageCustomTotals.js";
 import { WatchBudget, type BudgetSnapshot } from "../../src/application/watchBudget.js";
 import type { Budget } from "../../src/domain/budget/Budget.js";
 import { CustomTotal } from "../../src/domain/custom-total/CustomTotal.js";
@@ -100,8 +103,33 @@ describe("WatchBudget", () => {
     );
 
     expect(snapshots.length).toBeGreaterThan(before);
-    expect(snapshots.at(-1)?.totals).toHaveLength(1);
-    expect(snapshots.at(-1)?.totals[0]?.result.budgeted.format()).toBe("$500.00");
+    // Alongside the three sections `start()` seeded, so this looks itself up by
+    // name rather than assuming it is the only total in the snapshot.
+    const groceries = snapshots
+      .at(-1)
+      ?.totals.find((view) => view.total.name === "Groceries");
+    expect(groceries?.result.budgeted.format()).toBe("$500.00");
+  });
+
+  /** The panel must have the three sections to show on a profile that has never used it. */
+  it("seeds the default sections on first run", async () => {
+    const snapshots: BudgetSnapshot[] = [];
+    const source = manualSource();
+    const repository = inMemoryRepository();
+
+    new WatchBudget(source, new ManageCustomTotals(repository), (snapshot) =>
+      snapshots.push(snapshot),
+    ).start();
+    source.emit(januaryBudget());
+
+    await vi.waitFor(() => {
+      const names = snapshots.at(-1)?.totals.map((view) => view.total.name);
+      expect(names).toEqual([...DEFAULT_SECTION_NAMES]);
+    });
+    // Seeded once and persisted, so a reload does not stack duplicates.
+    expect((await repository.list()).map((total) => total.name)).toEqual([
+      ...DEFAULT_SECTION_NAMES,
+    ]);
   });
 
   it("stops emitting once detached", async () => {
@@ -121,6 +149,23 @@ describe("WatchBudget", () => {
 });
 
 describe("ManageCustomTotals", () => {
+  it("only seeds the default sections that are actually missing", async () => {
+    const repository = inMemoryRepository([
+      new CustomTotal("kept", "Needs", [{ type: "itemByLabel", itemLabel: "Rent" }]),
+    ]);
+    const totals = new ManageCustomTotals(repository);
+
+    const first = await totals.listWithDefaults();
+    expect(first.map((total) => total.name)).toEqual(["Needs", "Savings", "Wants"]);
+    // The user's existing section is untouched, not replaced by an empty one.
+    expect(first[0]?.id).toBe("kept");
+    expect(first[0]?.selections).toHaveLength(1);
+
+    // Idempotent: a second run adds nothing.
+    const second = await totals.listWithDefaults();
+    expect(second.map((total) => total.id)).toEqual(first.map((total) => total.id));
+  });
+
   it("creates, updates and removes, persisting each change", async () => {
     const repository = inMemoryRepository();
     const totals = new ManageCustomTotals(repository);

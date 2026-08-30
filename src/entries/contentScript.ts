@@ -24,12 +24,10 @@ const watch: WatchBudget = new WatchBudget(
   },
 );
 
-// Each action persists, then hands the new list back to the watcher so the
-// panel re-renders from what was actually saved rather than from local state.
+// Editing persists, then hands the new list back to the watcher so the panel
+// re-renders from what was actually saved rather than from local state.
 const totalsView = new CustomTotalsView(panel.totalsContainer, {
-  create: async (draft) => watch.totalsChanged(await customTotals.create(draft)),
   update: async (id, draft) => watch.totalsChanged(await customTotals.update(id, draft)),
-  remove: async (id) => watch.totalsChanged(await customTotals.remove(id)),
 });
 
 mountPanel(panel.root);
